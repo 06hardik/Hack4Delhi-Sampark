@@ -11,9 +11,7 @@ import { ParkingLotWithStatus, AggregateStats } from '@/types/parking';
 import { 
   Car, 
   AlertTriangle, 
-  Clock, 
-  IndianRupee,
-  CheckCircle
+  IndianRupee
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -70,10 +68,10 @@ export default function Overview() {
       
       <div className="p-3 md:p-6 space-y-4 md:space-y-6">
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 md:gap-4">
           {statsLoading || !stats ? (
             <>
-              {Array.from({ length: 5 }).map((_, i) => (
+              {Array.from({ length: 3 }).map((_, i) => (
                 <Skeleton key={i} className="h-20 md:h-28" />
               ))}
             </>
@@ -86,22 +84,10 @@ export default function Overview() {
                 variant="default"
               />
               <StatsCard
-                title="Compliant"
-                value={stats.lotsInCompliance}
-                icon={CheckCircle}
-                variant="success"
-              />
-              <StatsCard
-                title="Violating"
-                value={stats.lotsViolating}
-                icon={AlertTriangle}
-                variant="danger"
-              />
-              <StatsCard
                 title="Active Violations"
                 value={stats.activeViolations}
                 subtitle={`${stats.violationsToday} today`}
-                icon={Clock}
+                icon={AlertTriangle}
                 variant={stats.activeViolations > 0 ? 'danger' : 'default'}
               />
               <StatsCard

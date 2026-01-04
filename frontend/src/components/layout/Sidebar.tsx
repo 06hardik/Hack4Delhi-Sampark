@@ -42,7 +42,7 @@ export function Sidebar({ onNavigate }: SidebarProps) {
         </div>
         {!isCollapsed && (
           <div className="flex flex-col min-w-0">
-            <span className="font-semibold text-sm text-foreground truncate">ParkEnforce</span>
+            <span className="font-semibold text-sm text-foreground truncate">SAMPARK</span>
             <span className="text-[10px] text-muted-foreground truncate">MCD Capacity Monitor</span>
           </div>
         )}

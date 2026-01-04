@@ -299,9 +299,12 @@ export default function ViolationDetail() {
                     )}
                   </span>
                 </div>
-                <p className="text-[9px] md:text-[10px] text-muted-foreground mt-1 md:mt-1.5">
-                  Formula: Max Excess × (Duration in hours) × Hourly Rate
-                </p>
+                 <div className="mt-2 md:mt-3 p-2 md:p-3 bg-primary/5 border border-primary/20 rounded">
+                  <p className="text-[10px] md:text-xs font-medium text-primary mb-1">Penalty Formula</p>
+                  <code className="text-[10px] md:text-xs font-mono bg-white px-1.5 py-0.5 rounded border">
+                    Max Excess × Duration (hrs) × Hourly Rate
+                  </code>
+                </div>
               </div>
 
               <div className="bg-muted rounded p-1.5 md:p-2">

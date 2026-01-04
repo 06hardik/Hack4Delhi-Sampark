@@ -79,25 +79,14 @@ export function SimulationControl({
             Start Rush Hour simulation to test high traffic patterns:
           </p>
           
-          <div className="space-y-2">
-            {scenarioConfigs.map(config => (
-              <Button
-                key={config.id}
-                variant="outline"
-                onClick={() => onStart(config.id)}
-                disabled={isLoading}
-                className="w-full h-auto py-2 md:py-2.5 px-2 md:px-3 flex items-start gap-2 hover:bg-primary/5 hover:border-primary text-left"
-              >
-                <span className="text-base md:text-lg flex-shrink-0">{config.icon}</span>
-                <div className="flex flex-col items-start gap-0.5 min-w-0">
-                  <span className="text-[10px] md:text-xs font-medium truncate w-full">{config.name}</span>
-                  <span className="text-[9px] md:text-[10px] text-muted-foreground font-normal line-clamp-2">
-                    {config.description}
-                  </span>
-                </div>
-              </Button>
-            ))}
-          </div>
+          <Button
+            variant="default"
+            onClick={() => onStart('rush_hour')}
+            disabled={isLoading}
+            className="w-full h-9 md:h-10 text-xs md:text-sm"
+          >
+            Start Simulation
+          </Button>
         </div>
       )}
     </div>
