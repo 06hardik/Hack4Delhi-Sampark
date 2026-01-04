@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ParkingLot {
+  id                 String         @id @default(cuid())
+  name               String
+  contractor         String
+  allowedCapacity    Int
+  gracePeriodMinutes Int            @default(15)
+  penaltyRatePerHour Float          @default(50)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  
+  countEvents        CountEvent[]
+  violations         Violation[]
+  contractRules      ContractRule[]
+}
+
+model ContractRule {
+  id                 String    @id @default(cuid())
+  lotId              String
+  lot                ParkingLot @relation(fields: [lotId], references: [id])
+  version            String
+  allowedCapacity    Int
+  gracePeriodMinutes Int
+  penaltyRatePerHour Float
+  effectiveFrom      DateTime
+  effectiveTo        DateTime?
+  createdAt          DateTime  @default(now())
+  
+  @@index([lotId, effectiveFrom])
+}
+
+model CountEvent {
+  id           String     @id @default(cuid())
+  lotId        String
+  lot          ParkingLot @relation(fields: [lotId], references: [id])
+  timestamp    DateTime   @default(now())
+  vehicleCount Int
+  source       String     @default("sensor") // sensor, manual, simulation
+  
+  @@index([lotId, timestamp])
+}
+
+model Violation {
+  id              String     @id @default(cuid())
+  lotId           String
+  lot             ParkingLot @relation(fields: [lotId], references: [id])
+  startedAt       DateTime
+  endedAt         DateTime?
+  maxExcess       Int
+  allowedCapacity Int
+  peakCount       Int
+  durationMinutes Int        @default(0)
+  penaltyAmount   Float      @default(0)
+  ruleVersion     String
+  status          String     @default("active") // active, resolved
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  
+  evidence        Evidence[]
+  
+  @@index([lotId, status])
+  @@index([startedAt])
+}
+
+model Evidence {
+  id           String    @id @default(cuid())
+  violationId  String
+  violation    Violation @relation(fields: [violationId], references: [id])
+  capturedAt   DateTime
+  vehicleCount Int
+  imageUrl     String
+  sha256Hash   String
+  cameraId     String
+  lotSection   String
+  createdAt    DateTime  @default(now())
+  
+  @@index([violationId])
+}
