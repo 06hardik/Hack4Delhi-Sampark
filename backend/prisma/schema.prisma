@@ -10,13 +10,13 @@ datasource db {
 model ParkingLot {
   id                 String         @id @default(cuid())
   name               String
-  contractor         String
   allowedCapacity    Int
-  gracePeriodMinutes Int            @default(15)
-  penaltyRatePerHour Float          @default(50)
+  penaltyRatePerHour Float          @default(500)
+  latitude           Float
+  longitude          Float
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
-  
+
   countEvents        CountEvent[]
   violations         Violation[]
   contractRules      ContractRule[]
@@ -28,12 +28,11 @@ model ContractRule {
   lot                ParkingLot @relation(fields: [lotId], references: [id])
   version            String
   allowedCapacity    Int
-  gracePeriodMinutes Int
   penaltyRatePerHour Float
   effectiveFrom      DateTime
   effectiveTo        DateTime?
   createdAt          DateTime  @default(now())
-  
+
   @@index([lotId, effectiveFrom])
 }
 
@@ -43,8 +42,8 @@ model CountEvent {
   lot          ParkingLot @relation(fields: [lotId], references: [id])
   timestamp    DateTime   @default(now())
   vehicleCount Int
-  source       String     @default("sensor") // sensor, manual, simulation
-  
+  source       String     @default("sensor")
+
   @@index([lotId, timestamp])
 }
 
@@ -60,12 +59,12 @@ model Violation {
   durationMinutes Int        @default(0)
   penaltyAmount   Float      @default(0)
   ruleVersion     String
-  status          String     @default("active") // active, resolved
+  status          String     @default("active")
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
-  
+
   evidence        Evidence[]
-  
+
   @@index([lotId, status])
   @@index([startedAt])
 }
@@ -81,6 +80,6 @@ model Evidence {
   cameraId     String
   lotSection   String
   createdAt    DateTime  @default(now())
-  
+
   @@index([violationId])
 }

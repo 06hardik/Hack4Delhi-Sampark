@@ -26,13 +26,8 @@ app.get('/api/lots', async (req, res) => {
     const activeViolation = lot.violations[0];
     const utilization = (currentCount / lot.allowedCapacity) * 100;
     
-    let status = 'compliant';
-    if (activeViolation) {
-      const graceExpired = new Date(activeViolation.startedAt.getTime() + lot.gracePeriodMinutes * 60000) < new Date();
-      status = graceExpired ? 'violating' : 'grace_period';
-    } else if (currentCount > lot.allowedCapacity) {
-      status = 'grace_period';
-    }
+    // No grace period - immediate violation if over capacity
+    const status = (activeViolation || currentCount > lot.allowedCapacity) ? 'violating' : 'compliant';
     
     return { ...lot, currentCount, utilization, status, activeViolation };
   });
@@ -75,9 +70,12 @@ app.get('/api/violations/:id', async (req, res) => {
   res.json(violation);
 });
 
-// Start simulation
+// Start simulation (Rush Hour only)
 app.post('/api/simulate/start', async (req, res) => {
   const { scenario } = req.body;
+  if (scenario !== 'rush_hour') {
+    return res.status(400).json({ error: 'Only rush_hour scenario is supported' });
+  }
   await simulator.start(scenario);
   res.json({ running: true, scenario });
 });
@@ -89,13 +87,13 @@ app.post('/api/simulate/stop', async (req, res) => {
 });
 
 // Analytics endpoints
-app.get('/api/analytics/chronic-offenders', async (req, res) => {
-  const offenders = await prisma.violation.groupBy({
+app.get('/api/analytics/lot-summary', async (req, res) => {
+  const summary = await prisma.violation.groupBy({
     by: ['lotId'],
     _count: { id: true },
     _sum: { durationMinutes: true, penaltyAmount: true }
   });
-  res.json(offenders);
+  res.json(summary);
 });
 
 const PORT = process.env.PORT || 3001;

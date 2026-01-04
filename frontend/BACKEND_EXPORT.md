@@ -1,6 +1,6 @@
 # Smart Parking Capacity Enforcement System - Backend Export
 
-This document contains the complete backend code for running with Express and Prisma.
+This document contains the complete backend code for running with Express and Prisma for MCD Delhi Parking Lots.
 
 ## Quick Start
 
@@ -27,10 +27,10 @@ datasource db {
 model ParkingLot {
   id                 String         @id @default(cuid())
   name               String
-  contractor         String
   allowedCapacity    Int
-  gracePeriodMinutes Int            @default(15)
-  penaltyRatePerHour Float          @default(50)
+  penaltyRatePerHour Float          @default(500)  // INR per hour
+  latitude           Float
+  longitude          Float
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
   
@@ -45,7 +45,6 @@ model ContractRule {
   lot                ParkingLot @relation(fields: [lotId], references: [id])
   version            String
   allowedCapacity    Int
-  gracePeriodMinutes Int
   penaltyRatePerHour Float
   effectiveFrom      DateTime
   effectiveTo        DateTime?
@@ -75,7 +74,7 @@ model Violation {
   allowedCapacity Int
   peakCount       Int
   durationMinutes Int        @default(0)
-  penaltyAmount   Float      @default(0)
+  penaltyAmount   Float      @default(0)  // In INR
   ruleVersion     String
   status          String     @default("active") // active, resolved
   createdAt       DateTime   @default(now())
@@ -134,13 +133,8 @@ app.get('/api/lots', async (req, res) => {
     const activeViolation = lot.violations[0];
     const utilization = (currentCount / lot.allowedCapacity) * 100;
     
-    let status = 'compliant';
-    if (activeViolation) {
-      const graceExpired = new Date(activeViolation.startedAt.getTime() + lot.gracePeriodMinutes * 60000) < new Date();
-      status = graceExpired ? 'violating' : 'grace_period';
-    } else if (currentCount > lot.allowedCapacity) {
-      status = 'grace_period';
-    }
+    // No grace period - immediate violation if over capacity
+    const status = (activeViolation || currentCount > lot.allowedCapacity) ? 'violating' : 'compliant';
     
     return { ...lot, currentCount, utilization, status, activeViolation };
   });
@@ -183,9 +177,12 @@ app.get('/api/violations/:id', async (req, res) => {
   res.json(violation);
 });
 
-// Start simulation
+// Start simulation (Rush Hour only)
 app.post('/api/simulate/start', async (req, res) => {
   const { scenario } = req.body;
+  if (scenario !== 'rush_hour') {
+    return res.status(400).json({ error: 'Only rush_hour scenario is supported' });
+  }
   await simulator.start(scenario);
   res.json({ running: true, scenario });
 });
@@ -197,13 +194,13 @@ app.post('/api/simulate/stop', async (req, res) => {
 });
 
 // Analytics endpoints
-app.get('/api/analytics/chronic-offenders', async (req, res) => {
-  const offenders = await prisma.violation.groupBy({
+app.get('/api/analytics/lot-summary', async (req, res) => {
+  const summary = await prisma.violation.groupBy({
     by: ['lotId'],
     _count: { id: true },
     _sum: { durationMinutes: true, penaltyAmount: true }
   });
-  res.json(offenders);
+  res.json(summary);
 });
 
 const PORT = process.env.PORT || 3001;
@@ -231,39 +228,46 @@ export class RuleEngine {
       const existing = this.activeViolations.get(lotId);
       
       if (!existing) {
-        // Start new violation tracking
+        // Start new violation immediately (no grace period)
         this.activeViolations.set(lotId, { startedAt: new Date(), maxExcess: excess });
         
-        // Create violation record after grace period
-        setTimeout(async () => {
-          const current = this.activeViolations.get(lotId);
-          if (current) {
-            await this.prisma.violation.create({
-              data: {
-                lotId,
-                startedAt: current.startedAt,
-                maxExcess: current.maxExcess,
-                allowedCapacity: lot.allowedCapacity,
-                peakCount: lot.allowedCapacity + current.maxExcess,
-                ruleVersion: 'v1.0',
-                status: 'active'
-              }
-            });
+        // Create violation record immediately
+        await this.prisma.violation.create({
+          data: {
+            lotId,
+            startedAt: new Date(),
+            maxExcess: excess,
+            allowedCapacity: lot.allowedCapacity,
+            peakCount: vehicleCount,
+            ruleVersion: 'v2.3',
+            status: 'active'
           }
-        }, lot.gracePeriodMinutes * 60000);
+        });
       } else if (excess > existing.maxExcess) {
         existing.maxExcess = excess;
+        
+        // Update peak count in active violation
+        await this.prisma.violation.updateMany({
+          where: { lotId, status: 'active' },
+          data: { maxExcess: excess, peakCount: vehicleCount }
+        });
       }
     } else {
       // Resolve violation if exists
       const existing = this.activeViolations.get(lotId);
       if (existing) {
         const duration = Math.floor((Date.now() - existing.startedAt.getTime()) / 60000);
+        // Penalty calculation: excess vehicles × (duration in hours) × rate per hour (INR)
         const penalty = existing.maxExcess * (duration / 60) * lot.penaltyRatePerHour;
         
         await this.prisma.violation.updateMany({
           where: { lotId, status: 'active' },
-          data: { endedAt: new Date(), durationMinutes: duration, penaltyAmount: penalty, status: 'resolved' }
+          data: { 
+            endedAt: new Date(), 
+            durationMinutes: duration, 
+            penaltyAmount: Math.round(penalty), // INR
+            status: 'resolved' 
+          }
         });
         
         this.activeViolations.delete(lotId);
@@ -284,22 +288,50 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
+  // 5 MCD Delhi Parking Lots with actual coordinates
   const lots = [
-    { name: 'Downtown Plaza', contractor: 'CityPark Inc.', allowedCapacity: 100 },
-    { name: 'Airport Terminal P1', contractor: 'AeroParking LLC', allowedCapacity: 500 },
-    { name: 'Shopping Mall West', contractor: 'RetailPark Co.', allowedCapacity: 300 },
-    { name: 'Hospital Visitor', contractor: 'HealthSpace', allowedCapacity: 150 },
-    { name: 'University Main', contractor: 'EduPark Services', allowedCapacity: 400 },
-    { name: 'Sports Arena', contractor: 'EventParking Pro', allowedCapacity: 800 },
-    { name: 'Office Tower A', contractor: 'CorpPark Solutions', allowedCapacity: 200 },
-    { name: 'Train Station', contractor: 'TransitPark', allowedCapacity: 250 },
+    { 
+      name: 'MCD Parking — Asaf Ali Road, Near Delhi Police Help Center, Turkman Gate, Delhi',
+      allowedCapacity: 120,
+      penaltyRatePerHour: 500,
+      latitude: 28.6406,
+      longitude: 77.2401
+    },
+    { 
+      name: 'MCD Car Parking — Qulab Colony, GB Road, Nabi Karim, Paharganj, Delhi',
+      allowedCapacity: 80,
+      penaltyRatePerHour: 400,
+      latitude: 28.6512,
+      longitude: 77.2180
+    },
+    { 
+      name: 'MCD Scooter Parking — Qutub Road Market, Dangarmal Surana Marg, Narain, Delhi',
+      allowedCapacity: 200,
+      penaltyRatePerHour: 300,
+      latitude: 28.6429,
+      longitude: 77.2150
+    },
+    { 
+      name: 'MCD Parking — Padam Singh Road, Near Siam International Hotel, West Extension Area, Karol Bagh, Delhi',
+      allowedCapacity: 150,
+      penaltyRatePerHour: 450,
+      latitude: 28.6519,
+      longitude: 77.1905
+    },
+    { 
+      name: 'MCD Authorized Lot Parking — State Bank of India, Edayazham, New Delhi',
+      allowedCapacity: 100,
+      penaltyRatePerHour: 350,
+      latitude: 28.6127,
+      longitude: 77.2273
+    },
   ];
   
   for (const lot of lots) {
     await prisma.parkingLot.create({ data: lot });
   }
   
-  console.log('Seed data created!');
+  console.log('MCD Delhi parking lots seed data created!');
 }
 
 main().catch(console.error).finally(() => prisma.$disconnect());
@@ -312,4 +344,23 @@ main().catch(console.error).finally(() => prisma.$disconnect());
 3. Run `npx prisma db seed`
 4. Run `npx ts-node src/app.ts`
 
-The API will be available at `http://localhost:3001`.
+The API will be available at `http://localhost:3001`
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/lots` | GET | Get all parking lots with current status |
+| `/api/events/count` | POST | Ingest vehicle count event |
+| `/api/violations` | GET | Get all violations (filter by status/lotId) |
+| `/api/violations/:id` | GET | Get violation by ID |
+| `/api/simulate/start` | POST | Start Rush Hour simulation |
+| `/api/simulate/stop` | POST | Stop simulation |
+| `/api/analytics/lot-summary` | GET | Get violation summary by lot |
+
+## Notes
+
+- All penalties are calculated in Indian Rupees (₹)
+- No grace period - violations trigger immediately when capacity is exceeded
+- Only Rush Hour simulation scenario is available
+- All lots are MCD (Municipal Corporation of Delhi) operated

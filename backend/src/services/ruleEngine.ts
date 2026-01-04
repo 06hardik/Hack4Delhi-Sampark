@@ -16,39 +16,46 @@ export class RuleEngine {
       const existing = this.activeViolations.get(lotId);
       
       if (!existing) {
-        // Start new violation tracking
+        // Start new violation immediately (no grace period)
         this.activeViolations.set(lotId, { startedAt: new Date(), maxExcess: excess });
         
-        // Create violation record after grace period
-        setTimeout(async () => {
-          const current = this.activeViolations.get(lotId);
-          if (current) {
-            await this.prisma.violation.create({
-              data: {
-                lotId,
-                startedAt: current.startedAt,
-                maxExcess: current.maxExcess,
-                allowedCapacity: lot.allowedCapacity,
-                peakCount: lot.allowedCapacity + current.maxExcess,
-                ruleVersion: 'v1.0',
-                status: 'active'
-              }
-            });
+        // Create violation record immediately
+        await this.prisma.violation.create({
+          data: {
+            lotId,
+            startedAt: new Date(),
+            maxExcess: excess,
+            allowedCapacity: lot.allowedCapacity,
+            peakCount: vehicleCount,
+            ruleVersion: 'v2.3',
+            status: 'active'
           }
-        }, lot.gracePeriodMinutes * 60000);
+        });
       } else if (excess > existing.maxExcess) {
         existing.maxExcess = excess;
+        
+        // Update peak count in active violation
+        await this.prisma.violation.updateMany({
+          where: { lotId, status: 'active' },
+          data: { maxExcess: excess, peakCount: vehicleCount }
+        });
       }
     } else {
       // Resolve violation if exists
       const existing = this.activeViolations.get(lotId);
       if (existing) {
         const duration = Math.floor((Date.now() - existing.startedAt.getTime()) / 60000);
+        // Penalty calculation: excess vehicles × (duration in hours) × rate per hour (INR)
         const penalty = existing.maxExcess * (duration / 60) * lot.penaltyRatePerHour;
         
         await this.prisma.violation.updateMany({
           where: { lotId, status: 'active' },
-          data: { endedAt: new Date(), durationMinutes: duration, penaltyAmount: penalty, status: 'resolved' }
+          data: { 
+            endedAt: new Date(), 
+            durationMinutes: duration, 
+            penaltyAmount: Math.round(penalty), // INR
+            status: 'resolved' 
+          }
         });
         
         this.activeViolations.delete(lotId);
