@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
-
+import { eventLedger } from "./modules/events/event.ledger";
+import { eventRouter } from "./modules/events/event.routes";
 // Event ingestion
 import { ingestEvent } from "./modules/events/event.controller";
 
@@ -25,6 +26,7 @@ export function buildApp() {
   const app = Fastify({
     logger: true,
   });
+  (app as any).eventLedger = eventLedger;
 
   // ---- Plugins ----
   app.register(cors, {
@@ -36,8 +38,8 @@ export function buildApp() {
     return { status: "OK" };
   });
 
-  // ---- Event Ingestion ----
-  app.post("/api/events/count", ingestEvent);
+  // // ---- Event Ingestion ----
+  // app.post("/api/events/count", ingestEvent);
 
   // ---- APIs ----
   app.register(violationRoutes);
@@ -47,6 +49,7 @@ export function buildApp() {
   app.register(metricsRoutes);
   app.register(analyticsRoutes);
   app.register(simulationRoutes);
+  app.register(eventRouter, { prefix: "/api/events" });
 
   return app;
 }

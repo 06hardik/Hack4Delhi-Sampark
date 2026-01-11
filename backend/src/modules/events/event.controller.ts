@@ -1,24 +1,42 @@
 import { FastifyRequest, FastifyReply } from "fastify";
-import { validateCountEvent } from "./event.validator";
-import { sha256 } from "../../utils/hashing";
+import { eventLedger } from "./event.ledger";
+
+interface CountEventPayload {
+  lotId: string;
+  timestamp: string;
+  count: number;
+  source?: string;
+  frameId?: string;
+  confidence?: number;
+}
 
 export async function ingestEvent(
-  req: FastifyRequest,
+  request: FastifyRequest<{ Body: CountEventPayload }>,
   reply: FastifyReply
 ) {
-  try {
-    const event = validateCountEvent(req.body);
+  const { lotId, timestamp, count } = request.body;
 
-    const payloadHash = sha256(JSON.stringify(event));
-
-    // TEMP: no DB yet, just acknowledge
-    reply.code(202).send({
-      status: "ACCEPTED",
-      payloadHash
-    });
-  } catch (err: any) {
-    reply.code(400).send({
-      error: err.message
-    });
+  // Basic validation
+  if (!lotId || !timestamp || typeof count !== "number") {
+    return reply.status(400).send({ error: "lotId, timestamp and count are required" });
   }
+
+  if (count < 0 || count > 10000) {
+    return reply.status(400).send({ error: "count must be between 0 and 10000" });
+  }
+
+  const parsedTime = new Date(timestamp);
+  if (isNaN(parsedTime.getTime())) {
+    return reply.status(400).send({ error: "Invalid ISO8601 timestamp" });
+  }
+
+  // Save event (replace with real DB insert if needed)
+  await request.server.eventLedger.append({
+    lotId,
+    timestamp: parsedTime,
+    count,
+    raw: request.body, // keep full payload for audit/debug
+  });
+
+  return reply.status(200).send({ status: "accepted" });
 }

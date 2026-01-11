@@ -6,7 +6,7 @@ import threading
 import os
 from datetime import datetime, timezone
 
-API_URL = os.getenv("CV_API_URL", "http://127.0.0.1:7000/count")
+API_URL = os.getenv("CV_API_URL", "http://127.0.0.1:3000/count")
 TICK = 10
 RUN_FOR = 10 * 60
 
