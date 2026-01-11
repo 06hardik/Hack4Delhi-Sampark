@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Header } from '@/components/layout/Header';
@@ -6,11 +6,12 @@ import { ParkingLotsTable } from '@/components/parking/ParkingLotsTable';
 import { StatsCard } from '@/components/parking/StatsCard';
 import { PollingIndicator } from '@/components/parking/PollingIndicator';
 import { usePolling } from '@/hooks/usePolling';
-import { parkingService } from '@/services/parkingService';
+import { getLots } from '@/api/lots.api';
+import { getAggregateStats } from '@/api/stats.api';
 import { ParkingLotWithStatus, AggregateStats } from '@/types/parking';
-import { 
-  Car, 
-  AlertTriangle, 
+import {
+  Car,
+  AlertTriangle,
   IndianRupee
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -18,54 +19,46 @@ import { Skeleton } from '@/components/ui/skeleton';
 export default function Overview() {
   const navigate = useNavigate();
 
-  const { 
-    data: lots, 
-    isLoading: lotsLoading, 
-    lastUpdated 
+  const {
+    data: lots,
+    isLoading: lotsLoading,
+    lastUpdated
   } = usePolling<ParkingLotWithStatus[]>({
-    fetcher: parkingService.getLots,
+    fetcher: getLots,
     interval: 5000,
   });
 
-  const { 
-    data: stats, 
-    isLoading: statsLoading 
+  const {
+    data: stats,
+    isLoading: statsLoading
   } = usePolling<AggregateStats>({
-    fetcher: parkingService.getAggregateStats,
+    fetcher: getAggregateStats,
     interval: 5000,
   });
 
-  // Simulate tick during simulation
-  useEffect(() => {
-    const simState = parkingService.getSimulationState();
-    if (simState.isRunning) {
-      const interval = setInterval(() => {
-        parkingService.simulateTick();
-      }, 3000);
-      return () => clearInterval(interval);
-    }
-  }, []);
-
-  const handleLotClick = useCallback((lotId: string) => {
-    const lot = lots?.find(l => l.id === lotId);
-    if (lot?.activeViolation) {
-      navigate(`/violations/${lot.activeViolation.id}`);
-    }
-  }, [lots, navigate]);
+  const handleLotClick = useCallback(
+    (lotId: string) => {
+      const lot = lots?.find(l => l.id === lotId);
+      if (lot?.activeViolation) {
+        navigate(`/violations/${lot.activeViolation.id}`);
+      }
+    },
+    [lots, navigate]
+  );
 
   return (
     <DashboardLayout>
-      <Header 
-        title="Overview" 
+      <Header
+        title="Overview"
         subtitle="Real-time parking capacity monitoring"
         actions={
-          <PollingIndicator 
-            lastUpdated={lastUpdated} 
+          <PollingIndicator
+            lastUpdated={lastUpdated}
             isLoading={lotsLoading}
           />
         }
       />
-      
+
       <div className="p-3 md:p-6 space-y-4 md:space-y-6">
         {/* Stats Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 md:gap-4">
@@ -79,10 +72,11 @@ export default function Overview() {
             <>
               <StatsCard
                 title="Total Lots"
-                value={lots?.length || 5}
+                value={lots?.length ?? 0}
                 icon={Car}
                 variant="default"
               />
+
               <StatsCard
                 title="Active Violations"
                 value={stats.activeViolations}
@@ -90,6 +84,7 @@ export default function Overview() {
                 icon={AlertTriangle}
                 variant={stats.activeViolations > 0 ? 'danger' : 'default'}
               />
+
               <StatsCard
                 title="Penalties (Month)"
                 value={`₹${stats.totalPenaltiesAssessed.toLocaleString('en-IN')}`}
@@ -104,11 +99,12 @@ export default function Overview() {
         {/* Lots Table */}
         <div className="space-y-3">
           <h2 className="text-lg font-semibold">Parking Lots</h2>
+
           {lotsLoading || !lots ? (
             <Skeleton className="h-96" />
           ) : (
-            <ParkingLotsTable 
-              lots={lots} 
+            <ParkingLotsTable
+              lots={lots}
               onLotClick={handleLotClick}
             />
           )}
